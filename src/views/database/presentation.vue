@@ -11,9 +11,19 @@
           :options="list.connectionList"
           @update:value="updateConnection"
         />
+        <n-select
+          v-if="selectedConnectionType === 'pgsql'"
+          v-model:value="selectedDatabaseValue"
+          filterable
+          label-field="databaseName"
+          value-field="databaseName"
+          placeholder="选择数据库"
+          :options="list.databaseList"
+          @update:value="updateDatabase"
+        />
       </n-spin>
       <n-spin :show="treeStructureLoading">
-        <n-scrollbar x-scrollable class="schema-scrollbar" style="height: 430px">
+        <n-scrollbar x-scrollable class="database-scrollbar" style="height: 430px">
           <n-tree
             ref="tree"
             block-line
@@ -50,6 +60,7 @@
   import { useDialog, useMessage } from 'naive-ui';
   import {
     getDatabaseConnectionList,
+    getPgDbList,
     getTableAllDetails,
     updateDatabaseConnection,
   } from '@/api/database/database';
@@ -66,12 +77,15 @@
   const connectionListLoading = ref(false);
   const treeStructureLoading = ref(false);
 
+  let selectedConnectionType = '';
   let selectedConnectionId = '';
   let selectedConnectionValue = ref('');
+  let selectedDatabaseValue = ref('');
   let columnListLength = 1360;
   const list = reactive({
     connectionList: [] as any,
     connectionTreeStructureList: [] as any,
+    databaseList: [] as any,
     transformedTreeStructure: [] as any,
     columnsList: [] as any,
     transformedColumnsList: [] as any,
@@ -104,7 +118,7 @@
     },
   });
   const selectedStructInfo = ref({
-    schema: '',
+    database: '',
     table: '',
   });
   const updateSelectedStruct: TreeOverrideNodeClickBehavior = ({ option }) => {
@@ -112,7 +126,7 @@
       return 'toggleExpand';
     }
     let splittedStructInfoList = typeof option.key === 'string' ? option.key.split('.') : [];
-    selectedStructInfo.value.schema = splittedStructInfoList[0];
+    selectedStructInfo.value.database = splittedStructInfoList[0];
     selectedStructInfo.value.table = splittedStructInfoList[1];
     getAllColumns();
     loadDataTableDetails();
@@ -122,20 +136,18 @@
   const loadDataTableDetails = async () => {
     tableContentLoading.value = true;
     await getTableAllDetails({
-      tableName: selectedStructInfo.value.schema + '.' + selectedStructInfo.value.table,
+      tableName: selectedStructInfo.value.database + '.' + selectedStructInfo.value.table,
       connectionId: selectedConnectionId,
       pageSize: pagination.pageSize,
       pageNumber: pagination.page,
     })
       .then((res) => {
-        console.log(res);
         list.tableContentList = res.data;
         pagination.total = res.count;
-
         tableContentLoading.value = false;
       })
       .catch((error) => {
-        console.log(error);
+        console.error(error);
         tableContentLoading.value = false;
       });
   };
@@ -144,9 +156,38 @@
     list.connectionList = await getDatabaseConnectionList();
     connectionListLoading.value = false;
   };
+  const updateDatabase = async (value: string) => {
+    connectionListLoading.value = true;
+    list.connectionTreeStructureList = await updateDatabaseConnection({
+      id: selectedConnectionId,
+      pgDbName: value,
+    });
+    list.transformedTreeStructure = list.connectionTreeStructureList.map((tree) => ({
+      label: tree.databaseName,
+      key: tree.databaseName,
+      children:
+        tree.tableStructureInfoDtoList && tree.tableStructureInfoDtoList.length > 0
+          ? tree.tableStructureInfoDtoList.map((child) => ({
+              label:
+                child.tableName + (child.tableComment === '' ? '' : '(' + child.tableComment + ')'),
+              key: tree.databaseName + '.' + child.tableName,
+            }))
+          : [],
+    }));
+    connectionListLoading.value = false;
+  };
+  const getPgDbs = async () => {
+    connectionListLoading.value = true;
+    let tempDb = await getPgDbList({ id: selectedConnectionId });
+    list.databaseList = tempDb.map((db) => ({
+      databaseName: db,
+    }));
+    selectedDatabaseValue.value = list.databaseList[0].databaseName;
+    connectionListLoading.value = false;
+  };
   const getAllColumns = () => {
     let tableList = list.connectionTreeStructureList.filter((connectionTreeStructure) => {
-      return connectionTreeStructure.schemaName === selectedStructInfo.value.schema;
+      return connectionTreeStructure.databaseName === selectedStructInfo.value.database;
     });
     let columnList = tableList[0].tableStructureInfoDtoList.filter((table) => {
       return table.tableName === selectedStructInfo.value.table;
@@ -167,29 +208,32 @@
     selectedConnectionId = value;
     try {
       treeStructureLoading.value = true;
-      list.connectionTreeStructureList = await updateDatabaseConnection({ id: value });
+      selectedConnectionType = list.connectionList.find((item) => item.id === value).type;
+      if (selectedConnectionType === 'pgsql') {
+        getPgDbs();
+      }
+      list.connectionTreeStructureList = await updateDatabaseConnection({
+        id: value,
+        pgDbName: selectedDatabaseValue.value,
+      });
       treeStructureLoading.value = false;
     } catch (Error) {
-      console.log(Error);
+      console.error(Error);
       treeStructureLoading.value = false;
     }
     list.transformedTreeStructure = list.connectionTreeStructureList.map((tree) => ({
-      label: tree.schemaName,
-      key: tree.schemaName,
+      label: tree.databaseName,
+      key: tree.databaseName,
       children:
         tree.tableStructureInfoDtoList && tree.tableStructureInfoDtoList.length > 0
           ? tree.tableStructureInfoDtoList.map((child) => ({
               label:
                 child.tableName + (child.tableComment === '' ? '' : '(' + child.tableComment + ')'),
-              key: tree.schemaName + '.' + child.tableName,
+              key: tree.databaseName + '.' + child.tableName,
             }))
           : [],
     }));
   };
-
-  function onCheckedRow(rowKeys) {
-    console.log(rowKeys);
-  }
 
   onMounted(() => {
     getAllConnection().then(() => {
@@ -211,7 +255,7 @@
     height: 100%;
   }
 
-  .schema-scrollbar {
+  .database-scrollbar {
     height: 620px;
   }
 

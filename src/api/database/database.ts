@@ -11,8 +11,11 @@ export interface TypeConnectionTable {
   tableComment: string;
   tableName: string;
 }
-
-//获取schema
+//获取pgsql的所有数据库
+export function getPgDbList(params) {
+  return Alova.Get('/database/retrieve/pgDbs', { params });
+}
+//更新数据库连接
 export function updateDatabaseConnection(params) {
   return Alova.Get<{ list: TypeConnectionSchema[] }>('/database/connection/update', { params });
 }
@@ -21,10 +24,7 @@ export function updateDatabaseConnection(params) {
 export function getDatabaseConnectionList() {
   return Alova.Get('/database/retrieve/connection');
 }
-//获取所有列结构信息
-export function getTableAllColumns(params) {
-  return Alova.Get('/database/retrieve/column/structure', { params });
-}
+
 //获取所有表内容
 export function getTableAllDetails(data) {
   return Alova.Post('/database/retrieve/table/details', data, {

@@ -1,6 +1,6 @@
 import { RouteRecordRaw } from 'vue-router';
 import { Layout } from '@/router/constant';
-import { CheckCircleOutlined } from '@vicons/antd';
+import { DatabaseOutlined } from '@vicons/antd';
 import { renderIcon } from '@/utils/index';
 
 const routes: Array<RouteRecordRaw> = [
@@ -11,7 +11,7 @@ const routes: Array<RouteRecordRaw> = [
     component: Layout,
     meta: {
       title: '数据库页面',
-      icon: renderIcon(CheckCircleOutlined),
+      icon: renderIcon(DatabaseOutlined),
       sort: 9,
     },
     children: [
