@@ -27,6 +27,7 @@
   "dependencies": {
     "@alova/adapter-axios": "^2.0.11",
     "@alova/mock": "^2.0.6",
+    "@kangc/v-md-editor": "^2.3.18",
     "@vicons/antd": "^0.12.0",
     "@vicons/ionicons5": "^0.12.0",
     "@vueup/vue-quill": "^1.2.0",
@@ -37,8 +38,10 @@
     "dayjs": "^1.11.13",
     "echarts": "^5.6.0",
     "element-resize-detector": "^1.2.4",
+    "highlight.js": "^11.11.1",
     "js-sql-parser": "^1.6.0",
     "lodash-es": "^4.17.21",
+    "markdown-it": "^14.1.0",
     "mockjs": "^1.1.0",
     "naive-ui": "^2.39.0",
     "pinia": "^2.2.2",

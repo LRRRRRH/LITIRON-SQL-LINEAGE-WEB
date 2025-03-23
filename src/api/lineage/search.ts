@@ -1,7 +1,7 @@
 import { Alova } from '@/utils/http/alova/index';
 
 //获取数据库连接
-export function getConnectionListByType() {
+export function getConnectionLists() {
   return Alova.Get('/lineage/retrieve/connection');
 }
 //变更数据库连接,获取数据库信息

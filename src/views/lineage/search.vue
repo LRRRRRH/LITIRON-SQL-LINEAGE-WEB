@@ -1,5 +1,5 @@
 <template>
-  <n-flex vertical>
+  <n-flex vertical style="height: calc(100vh - 120px)">
     <n-spin :show="selectConditionLoading">
       <div class="search-condition-box">
         <n-flex>
@@ -43,17 +43,13 @@
         </n-flex>
       </div>
     </n-spin>
-    <div ref="chartDom" class="select-result-box" id="relationGraph"></div>
+    <div ref="chartDom" class="select-result-box"></div>
   </n-flex>
 </template>
 
 <script lang="ts" setup>
   import { onMounted, ref } from 'vue';
-  import {
-    getConnectionListByType,
-    retrieveNeo4jTable,
-    updateDbConnection,
-  } from '@/api/lineage/search';
+  import { getConnectionLists, retrieveNeo4jTable, updateDbConnection } from '@/api/lineage/search';
   import { getPgDbList } from '@/api/database/database';
   import * as echarts from 'echarts/core';
   import {
@@ -153,12 +149,11 @@
         }
       });
     });
-
     nodes.value = Array.from(nodeMap.values());
   };
   const getConnectionList = async () => {
     selectConditionLoading.value = true;
-    let tempConnections = await getConnectionListByType();
+    let tempConnections = await getConnectionLists();
     if (!tempConnections) {
       console.error('获取数据库连接失败');
       selectConditionLoading.value = false;
@@ -357,19 +352,19 @@
 
 <style lang="less" scoped>
   .search-condition-box {
-    /deep/ .n-select {
+    :deep(.n-select) {
       width: 17.9%;
     }
   }
 
   .search-button {
-    /deep/ .n-button {
+    :deep(.n-button) {
       width: 85px;
     }
   }
 
   .select-result-box {
-    height: 485px;
+    height: 80%;
     width: 100%;
   }
 </style>
