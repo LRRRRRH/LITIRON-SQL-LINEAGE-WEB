@@ -12,16 +12,24 @@ const routes: Array<RouteRecordRaw> = [
     meta: {
       title: 'SQL解析',
       icon: renderIcon(ConsoleSqlOutlined),
-      sort: 10,
+      sort: 1,
     },
     children: [
       {
-        path: 'presentation',
-        name: 'sqlParse-presentation',
+        path: 'tableParse',
+        name: 'table-parse',
         meta: {
-          title: 'SQL解析',
+          title: '表级别SQL解析',
         },
-        component: () => import('@/views/sqlParse/presentation.vue'),
+        component: () => import('@/views/sqlParse/tablePresentation.vue'),
+      },
+      {
+        path: 'fieldParse',
+        name: 'field-parse',
+        meta: {
+          title: '字段级别SQL解析',
+        },
+        component: () => import('@/views/sqlParse/fieldPresentation.vue'),
       },
     ],
   },

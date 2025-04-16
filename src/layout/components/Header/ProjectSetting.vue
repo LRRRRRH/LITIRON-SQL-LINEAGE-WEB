@@ -218,12 +218,6 @@
             <n-select v-model:value="settingStore.pageAnimateType" :options="animateOptions" />
           </div>
         </div>
-
-        <div class="drawer-setting-item">
-          <n-alert type="warning" :showIcon="false">
-            <p>{{ alertText }}</p>
-          </n-alert>
-        </div>
       </div>
     </n-drawer-content>
   </n-drawer>
@@ -259,7 +253,6 @@
         title: props.title,
         isDrawer: false,
         placement: 'right',
-        alertText: '该功能主要实时预览各种布局效果，更多完整配置在 projectSetting.ts 中设置',
         appThemeList: designStore.appThemeList,
       });
 

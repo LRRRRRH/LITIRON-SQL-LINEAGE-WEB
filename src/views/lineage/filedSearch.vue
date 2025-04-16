@@ -37,7 +37,15 @@
             @update:value="updateTable"
             clearable
           />
-          <n-button class="search-button" type="info" @click="searchLineageTableRelation"
+          <n-select
+            placeholder="选择列名"
+            :options="columnList"
+            v-model:value="currentColumn"
+            label-field="columnName"
+            value-field="columnName"
+            clearable
+          />
+          <n-button class="search-button" type="info" @click="searchLineageColumnRelation"
             >查询
           </n-button>
         </n-flex>
@@ -49,7 +57,11 @@
 
 <script lang="ts" setup>
   import { onMounted, ref } from 'vue';
-  import { getConnectionLists, retrieveNeo4jTable, updateDbConnection } from '@/api/lineage/search';
+  import {
+    getConnectionLists,
+    retrieveNeo4jColumn,
+    updateDbConnection,
+  } from '@/api/lineage/search';
   import { getPgDbList } from '@/api/database/database';
   import * as echarts from 'echarts/core';
   import {
@@ -61,6 +73,7 @@
   import { GraphChart, GraphSeriesOption } from 'echarts/charts';
   import { CanvasRenderer } from 'echarts/renderers';
   import { useMessage } from 'naive-ui';
+
   const message = useMessage();
   echarts.use([TitleComponent, TooltipComponent, GraphChart, CanvasRenderer]);
 
@@ -90,66 +103,93 @@
 
   //临时表集合包含该数据库下的所有表，后续根据选择的数据库得出表集合
   let tempTableList = [];
+  //临时列集合包含该表下的所有列名，后续根据选择的表得出列集合
+  let tempColumnList = [];
   //表集合
   let tableList = ref([] as any);
   //选中的表
   let currentTable = ref('');
+  //列集合
+  let columnList = ref([] as any);
+  //选中的列名
+  let currentColumn = ref('');
   //所有节点
   const nodes = ref<any[]>([]);
   //所有边
   const edges = ref<any[]>([]);
-
-  // 处理异步数据的方法
   const processGraphData = (apiDataList: any[]) => {
     const nodeMap = new Map<string, any>();
-    const linkSet = new Set<string>(); // 防止重复边
+    const edges: any[] = [];
+    const linkSet = new Set<string>();
 
     apiDataList.forEach((apiData) => {
+      const isCurrentNode = apiData.tableName === currentTable.value;
       // 处理当前节点
       const currentNode = {
         id: apiData.id,
         name: apiData.tableName,
-        ip: apiData.connectionIp,
-        port: apiData.connectionPort,
-        database: apiData.databaseName,
-        schema: apiData.schemaName,
-        tableComment: apiData.tableComment,
+        isCurrent: isCurrentNode,
+        meta: {
+          ip: apiData.connectionIp,
+          port: apiData.connectionPort,
+          database: apiData.databaseName,
+          schema: apiData.schemaName,
+          comment: apiData.tableComment,
+        },
       };
-      if (!nodeMap.has(currentNode.id)) {
-        nodeMap.set(currentNode.id, currentNode);
-      }
-      // 处理关系
-      apiData.outgoingRelationShip?.forEach((relation: any) => {
-        const target = relation.to;
-        const targetNode = {
-          id: target.id,
-          name: target.tableName,
-          ip: target.connectionIp,
-          port: target.connectionPort,
-          database: target.databaseName,
-          schema: target.schemaName,
-          tableComment: target.tableComment,
-        };
+      nodeMap.set(currentNode.id, currentNode);
 
-        if (!nodeMap.has(targetNode.id)) {
-          nodeMap.set(targetNode.id, targetNode);
-        }
-        // 生成唯一边标识
-        const edgeKey = `${currentNode.id}-${targetNode.id}-${relation.relation}`;
-        if (!linkSet.has(edgeKey)) {
-          edges.value.push({
-            source: currentNode.id,
-            target: targetNode.id,
-            label: relation.relation,
-            lineStyle: {
-              type: relation.relation === 'JOIN' ? 'dashed' : 'solid', // 根据关系类型区分样式
-            },
-          });
-          linkSet.add(edgeKey);
-        }
+      // 处理所有关系（通过direction区分上下游）
+      apiData.outgoingRelationShip?.forEach((relation: any) => {
+        const targetNode = {
+          id: relation.to.id,
+          name: relation.to.tableName,
+          meta: {
+            ip: relation.to.connectionIp,
+            port: relation.to.connectionPort,
+            database: relation.to.databaseName,
+            schema: relation.to.schemaName,
+            comment: relation.to.tableComment,
+          },
+        };
+        nodeMap.set(targetNode.id, targetNode);
+
+        // 根据方向确定边的流向
+        const isUpstream = relation.direction === 'UPSTREAM';
+        const [sourceId, targetId] = isUpstream
+          ? [targetNode.id, currentNode.id] // 上游反转方向
+          : [currentNode.id, targetNode.id]; // 下游保持原方向
+
+        // 生成唯一边标识（考虑方向）
+        const edgeKey = `${sourceId}-${targetId}-${relation.relationFiled}`;
+        if (linkSet.has(edgeKey)) return;
+
+        edges.push({
+          source: sourceId,
+          target: targetId,
+          label: relation.relationFiled,
+          lineStyle: {
+            type: isUpstream ? 'dashed' : 'solid',
+          },
+          properties: {
+            direction: relation.direction,
+            relationshipId: relation.id,
+          },
+        });
+        linkSet.add(edgeKey);
       });
     });
-    nodes.value = Array.from(nodeMap.values());
+
+    return {
+      nodes: Array.from(nodeMap.values()),
+      edges,
+      stats: {
+        totalNodes: nodeMap.size,
+        totalEdges: edges.length,
+        upstreamCount: edges.filter((e) => e.properties.direction === 'UPSTREAM').length,
+        downstreamCount: edges.filter((e) => e.properties.direction === 'DOWNSTREAM').length,
+      },
+    };
   };
   const getConnectionList = async () => {
     selectConditionLoading.value = true;
@@ -180,44 +220,130 @@
     currentSchema.value = schemaList[0].schemaName;
     selectConditionLoading.value = false;
   };
-  const searchLineageTableRelation = async () => {
-    let obj = { id: '', databaseName: '', schemaName: '', tableName: '' };
-    obj.id = currentConnection.value;
+  const searchLineageColumnRelation = async () => {
+    if (!currentTable.value) {
+      message.error('请选择要查询的表');
+      return;
+    }
+    if (!currentColumn.value) {
+      message.error('请选择要查询的列名');
+      return;
+    }
+    let obj = {
+      id: currentConnection.value,
+      databaseName: '',
+      schemaName: '',
+      tableName: currentTable.value,
+      columnName: currentColumn.value,
+    };
     obj.databaseName =
       currentDataBaseType.value === 'mysql' ? currentDatabase.value : currentSchema.value;
     obj.schemaName = currentDataBaseType.value === 'mysql' ? '' : currentDatabase.value;
-    obj.tableName = currentTable.value;
     try {
-      const result = await retrieveNeo4jTable(obj);
+      const result = await retrieveNeo4jColumn(obj);
       if (!result) {
         message.info('无图数据！');
         return;
       }
-      processGraphData(result as any);
+      const { nodes: processedNodes, edges: processedEdges } = processGraphData(result as any);
+      nodes.value = processedNodes;
+      edges.value = processedEdges;
       // 数据准备好后初始化图表
       initChart();
     } catch (error) {
       console.error('数据获取失败:', error);
     }
   };
-  // 生成HSL颜色函数
-  const generateHSLColor = (seed: string) => {
-    // 通过hash生成确定性的数值
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  const handleNodeDoubleClick = async (nodeData: any) => {
+    const requestParams = {
+      id: currentConnection.value,
+      databaseName: nodeData.meta.database,
+      schemaName: nodeData.meta.schema,
+      tableName: nodeData.name,
+      columnName: currentColumn.value,
+    };
+    try {
+      const result = await retrieveNeo4jColumn(requestParams);
+      const { nodes: newNodes, edges: newEdges } = processGraphData(result as any);
+      console.log('newNodes', newNodes);
+      console.log('newEdges', newEdges);
+      mergeGraphData(newNodes, newEdges); // 合并数据
+      updateChart(); // 更新图表
+    } catch (error) {
+      console.error('Failed to load node relations:', error);
     }
+  };
+  const mergeGraphData = (newNodes: any[], newEdges: any[]) => {
+    // 节点去重（按 id）
+    const existingNodeIds = new Set(nodes.value.map((n) => n.id));
+    newNodes.forEach((node) => {
+      if (!existingNodeIds.has(node.id)) {
+        nodes.value.push(node);
+        existingNodeIds.add(node.id);
+      }
+    });
+    console.log('nodes', nodes.value);
 
-    const h = Math.abs(hash % 360); // 色相 0-359
-    const s = 70 + Math.abs(hash % 15); // 饱和度 70-85%
-    const l = 50 + Math.abs(hash % 10); // 亮度 50-60%
+    // 边去重（按 source-target-label）
+    const existingEdgeKeys = new Set(edges.value.map((e) => `${e.source}-${e.target}-${e.label}`));
+    newEdges.forEach((edge) => {
+      const edgeKey = `${edge.source}-${edge.target}-${edge.label}`;
+      if (!existingEdgeKeys.has(edgeKey)) {
+        edges.value.push(edge);
+        existingEdgeKeys.add(edgeKey);
+      }
+    });
+    console.log('edges', edges.value);
+  };
+  const updateChart = () => {
+    if (!myChart.value) return;
 
-    return `hsl(${h}, ${s}%, ${l}%)`;
+    const option: EChartsOption = {
+      series: [
+        {
+          type: 'graph',
+          data: nodes.value.map((node) => ({
+            ...node,
+            symbolSize: node.isCurrent ? 100 : 90,
+            itemStyle: {
+              color: node.isCurrent ? '#67C23A' : '#6EA8FF', // 当前节点绿色
+              borderColor: node.isCurrent ? '#5DA934' : '#4A89FF',
+              borderWidth: node.isCurrent ? 2 : 1,
+              emphasis: {
+                color: node.isCurrent ? '#5DA934' : '#409EFF',
+              },
+            },
+          })),
+          links: edges.value.map((edge) => ({
+            ...edge,
+            lineStyle: {
+              type: edge.properties.direction === 'UPSTREAM' ? 'dashed' : 'solid',
+              color:
+                edge.properties.direction === 'UPSTREAM'
+                  ? '#FF8800' // 上游橙色
+                  : '#0099FF', // 下游蓝色
+              curveness: 0.3,
+            },
+          })),
+        },
+      ],
+    };
+
+    // 增量更新图表
+    myChart.value.setOption(option, { notMerge: false });
   };
   const initChart = () => {
     if (!chartDom.value || nodes.value.length === 0) return;
     myChart.value?.dispose(); // 清除旧实例
     myChart.value = echarts.init(chartDom.value);
+
+    myChart.value.on('dblclick', async (params) => {
+      if (params.dataType === 'node') {
+        const nodeData = params.data;
+        console.log(nodeData, 'nodeData');
+        await handleNodeDoubleClick(nodeData);
+      }
+    });
     myChart.value.showLoading({
       text: '加载中',
       fontSize: 16,
@@ -230,9 +356,9 @@
             const data = params.data;
             return `
             <div>表名：${data.name}</div>
-             ${data.tableComment ? `<div>表注释：${data.tableComment}</div></div>` : ''}
-                ${data.schema ? `<div>Schema: ${data.schema}</div>` : ''}
-            <div>数据库: ${data.database}</div>
+             ${data.meta.comment ? `<div>表注释：${data.meta.comment}</div></div>` : ''}
+                ${data.meta.schema ? `<div>Schema: ${data.meta.schema}</div>` : ''}
+            <div>数据库: ${data.meta.database}</div>
           `;
           }
           return `${params.data.label} 关系`;
@@ -243,20 +369,38 @@
           type: 'graph',
           layout: 'force',
           force: {
-            repulsion: 150,
-            edgeLength: 100,
-            gravity: 0.1,
+            repulsion: 250,
+            edgeLength: 200,
+            gravity: 0.05,
+            layoutAnimation: true,
           },
           draggable: true,
           focusNodeAdjacency: true,
+          legendHoverLink: true,
+          roam: true,
           data: nodes.value.map((node) => ({
             ...node,
-            symbolSize: node.schema ? 40 : 50, // 根据schema存在调整大小
+            symbolSize: node.isCurrent ? 100 : 90,
             itemStyle: {
-              color: ({ data }: { data: any }) => generateHSLColor(data.database),
+              color: node.isCurrent ? '#67C23A' : '#6EA8FF', // 当前节点绿色
+              borderColor: node.isCurrent ? '#5DA934' : '#4A89FF',
+              borderWidth: node.isCurrent ? 2 : 1,
+              emphasis: {
+                color: node.isCurrent ? '#5DA934' : '#409EFF',
+              },
             },
           })),
-          links: edges.value,
+          links: edges.value.map((edge) => ({
+            ...edge,
+            lineStyle: {
+              type: edge.properties.direction === 'UPSTREAM' ? 'dashed' : 'solid',
+              color:
+                edge.properties.direction === 'UPSTREAM'
+                  ? '#FF8800' // 上游橙色
+                  : '#0099FF', // 下游蓝色
+              curveness: 0.3,
+            },
+          })),
           edgeSymbol: ['none', 'arrow'],
           edgeLabel: {
             show: true,
@@ -265,7 +409,7 @@
           },
           label: {
             show: true,
-            position: 'right',
+            position: 'inside',
             distance: 10,
             formatter: '{b}',
           },
@@ -326,9 +470,29 @@
     tableList.value = tempTable.map((table) => ({
       tableName: table.tableName,
     }));
-    currentTable.value = '';
+    tempColumnList = tempTable.map((table) => ({
+      table: table.tableName,
+      columnList: table.columnStructureInfoDtoList,
+    }));
+    if (tempTable.length > 0) {
+      currentTable.value = tableList.value[0].tableName;
+    } else {
+      currentTable.value = '';
+    }
+    columnList.value = [];
+    currentColumn.value = '';
   };
-
+  const updateTable = (value: string) => {
+    let tempColumn = tempColumnList.find((item) => item.table === value).columnList;
+    columnList.value = tempColumn.map((column) => ({
+      columnName: column.columnName,
+    }));
+    if (tempColumn) {
+      currentColumn.value = columnList.value[0].columnName;
+    } else {
+      currentColumn.value = '';
+    }
+  };
   const updatePgDb = async (value: string) => {
     selectConditionLoading.value = true;
     let tempDatabaseLists = await updateDbConnection({

@@ -12,3 +12,7 @@ export function updateDbConnection(params) {
 export function retrieveNeo4jTable(data) {
   return Alova.Post('/lineage/neo4j/retrieve/table', data);
 }
+//查询图数据库(字段纬度)
+export function retrieveNeo4jColumn(data) {
+  return Alova.Post('/lineage/neo4j/retrieve/column', data);
+}

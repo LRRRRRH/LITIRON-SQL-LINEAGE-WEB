@@ -12,7 +12,7 @@ const routes: Array<RouteRecordRaw> = [
     meta: {
       title: '设置页面',
       icon: renderIcon(SettingOutlined),
-      sort: 5,
+      sort: 12,
     },
     children: [
       {
@@ -23,14 +23,14 @@ const routes: Array<RouteRecordRaw> = [
         },
         component: () => import('@/views/setting/account/account.vue'),
       },
-      {
-        path: 'system',
-        name: 'setting-system',
-        meta: {
-          title: '系统设置',
-        },
-        component: () => import('@/views/setting/system/system.vue'),
-      },
+      // {
+      //   path: 'system',
+      //   name: 'setting-system',
+      //   meta: {
+      //     title: '系统设置',
+      //   },
+      //   component: () => import('@/views/setting/system/system.vue'),
+      // },
     ],
   },
 ];

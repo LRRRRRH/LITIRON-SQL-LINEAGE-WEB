@@ -12,9 +12,17 @@ const routes: Array<RouteRecordRaw> = [
     meta: {
       title: '数据库页面',
       icon: renderIcon(DatabaseOutlined),
-      sort: 9,
+      sort: 0,
     },
     children: [
+      {
+        path: 'register',
+        name: 'database-register',
+        meta: {
+          title: '数据库注册',
+        },
+        component: () => import('@/views/database/register.vue'),
+      },
       {
         path: 'presentation',
         name: 'database-presentation',

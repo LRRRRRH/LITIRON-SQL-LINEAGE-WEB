@@ -7,21 +7,29 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/lineage',
     name: 'LineageSearch',
-    redirect: '/lineage/search',
+    redirect: '/lineage/tableSearch',
     component: Layout,
     meta: {
       title: '血缘查询',
       icon: renderIcon(SearchOutlined),
-      sort: 11,
+      sort: 2,
     },
     children: [
       {
-        path: 'search',
-        name: 'lineageSearch',
+        path: 'tableSearch',
+        name: 'table-search',
         meta: {
-          title: '血缘查询',
+          title: '表级别血缘查询',
         },
-        component: () => import('@/views/lineage/search.vue'),
+        component: () => import('@/views/lineage/tableSearch.vue'),
+      },
+      {
+        path: 'filedSearch',
+        name: 'filed-search',
+        meta: {
+          title: '字段级别血缘查询',
+        },
+        component: () => import('@/views/lineage/filedSearch.vue'),
       },
     ],
   },

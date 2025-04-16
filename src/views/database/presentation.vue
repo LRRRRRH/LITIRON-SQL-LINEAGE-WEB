@@ -64,12 +64,7 @@
     getTableAllDetails,
     updateDatabaseConnection,
   } from '@/api/database/database';
-  import {
-    DEFAULT_PAGE,
-    DEFAULT_PAGE_SIZE,
-    DEFAULT_PAGE_SIZES,
-    PAGE_SIZES,
-  } from '@/constant/tableConstant';
+  import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZES } from '@/constant/tableConstant';
 
   const message = useMessage();
   const dialog = useDialog();
@@ -194,7 +189,10 @@
     });
     list.transformedColumnsList = columnList[0].columnStructureInfoDtoList.map((column) => ({
       title:
-        column.columnName + (column.columnComment === '' ? '' : '(' + column.columnComment + ')'),
+        column.columnName +
+        (column.columnComment === '' || column.columnComment === null
+          ? ''
+          : '(' + column.columnComment + ')'),
       key: column.columnName,
       ellipsis: {
         tooltip: true,

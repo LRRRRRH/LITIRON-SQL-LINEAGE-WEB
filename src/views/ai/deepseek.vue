@@ -21,7 +21,7 @@
               <span v-if="answerLoading" class="typing-cursor"></span>
             </n-scrollbar>
             <template #action>
-              <n-button v-if="answer.value !== ''">运行</n-button>
+              <n-button v-if="answer.value !== ''" @click="showChart">生成图表</n-button>
             </template>
           </n-card>
         </div>
@@ -46,11 +46,19 @@
         </div>
       </n-spin>
     </div>
+    <n-modal
+      v-model:show="showChartModal"
+      preset="card"
+      title="图表预览"
+      style="width: 80%; max-width: 800px"
+    >
+      <iframe :src="chartHtmlSrc" style="width: 100%; height: 500px; border: none"></iframe>
+    </n-modal>
   </n-flex>
 </template>
 
 <script setup>
-  import { nextTick, ref } from 'vue';
+  import { nextTick, ref, watch } from 'vue';
   import hljs from 'highlight.js';
   import MarkdownIt from 'markdown-it';
   import VMdPreview from '@kangc/v-md-editor/lib/preview';
@@ -62,6 +70,8 @@
   const answerLoading = ref(false);
   const answer = ref('');
   const answerHtml = ref('');
+  const showChartModal = ref(false);
+  const chartHtmlSrc = ref('');
   const question = ref('');
   const test = ref('');
 
@@ -71,20 +81,28 @@
   const markdownParser = new MarkdownIt({
     html: true,
     linkify: true,
-    breaks: false,
+    breaks: true,
+    xhtmlOut: false,
     highlight: (code, lang) => {
       const validLang = hljs.getLanguage(lang) ? lang : 'plaintext';
       return hljs.highlight(code, { language: validLang }).value;
     },
   });
+  function isOnlyNewlines(str) {
+    const trimmed = str.trim().replace(/[\n\r\s]/g, '');
+    return trimmed.length === 0;
+  }
   // 核心打字机逻辑
   const startTypewriter = () => {
     typingTimer = setInterval(async () => {
       if (typewriterQueue.length > 0) {
-        // 保留空格和标点
-        const chunk = typewriterQueue.splice(0, 3).join('');
-        answer.value += chunk.replace(/\\s/g, ' '); // 显式处理空格
-        answerHtml.value = markdownParser.render(answer.value);
+        const chunk = typewriterQueue.shift(); // 取出整个字符串块
+        if (isOnlyNewlines(chunk)) {
+          console.log('chunk仅包含换行符');
+        } else {
+          answer.value += chunk;
+          answerHtml.value = markdownParser.render(answer.value);
+        }
       } else if (typingTimer) {
         console.log('清除定时器');
         clearInterval(typingTimer);
@@ -98,18 +116,50 @@
           behavior: 'smooth',
         });
       }
-    }, 80); // 调整到更自然的速度
+    }, 80);
   };
+  // 提取Markdown中的HTML代码块
+  const extractChartHtml = () => {
+    const codeBlockRegex = /```html\s*?\r?\n([\s\S]*?)\s*?\r?\n```/;
 
+    const match = codeBlockRegex.exec(answer.value);
+    if (match && match[1]) {
+      return match[1]
+        .replace(/\r\n/g, '\n') // 统一换行符
+        .trim()
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+    }
+
+    return null;
+  };
+  const showChart = () => {
+    const htmlCode = extractChartHtml();
+    if (htmlCode) {
+      const blob = new Blob([htmlCode], { type: 'text/html' });
+      chartHtmlSrc.value = URL.createObjectURL(blob);
+      showChartModal.value = true;
+    } else {
+      window.$message.warning('未检测到有效的图表代码');
+    }
+  };
+  // 清理URL对象
+  watch(showChartModal, (newVal) => {
+    if (!newVal && chartHtmlSrc.value) {
+      URL.revokeObjectURL(chartHtmlSrc.value);
+      chartHtmlSrc.value = '';
+    }
+  });
   const askQuestion = async () => {
     answer.value = ''; // 清空历史回答
     answerHtml.value = '';
     typewriterQueue = []; // 重置队列
 
     answerLoading.value = true;
-    fetch(`/litiron/deepseek/ask?content=${encodeURIComponent(question.value)}`, {
+    fetch(`/litiron/deepseek/askLangchain?content=${encodeURIComponent(question.value)}`, {
       method: 'GET',
-      timeout: 300,
+      timeout: 6000,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
@@ -123,23 +173,26 @@
           const { done, value } = await reader.read();
           if (done) break;
           answerLoading.value = false;
-          buffer += decoder.decode(value);
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          lines.forEach((line) => {
-            if (line.startsWith('data:')) {
-              const content = line.replace('data:', '');
-              typewriterQueue.push(...(content + '\n').split(''));
-            }
-            if (!typingTimer) {
-              startTypewriter();
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/(?<=data:)/);
+          lines.slice(0, -1).forEach((line) => {
+            const content = line.replace('data:', '');
+            const contentRes = content.replace('data1:', 'data:');
+            if (contentRes) {
+              typewriterQueue.push(contentRes);
+              if (!typingTimer) startTypewriter();
             }
           });
+          buffer = lines[lines.length - 1] || '';
         }
-        // 处理剩余数据
         if (buffer) {
-          console.log('Final chunk:', buffer);
+          const content = buffer.replace('data:', '');
+          const contentRes = content.replace('data1:', 'data:');
+          if (contentRes) {
+            typewriterQueue.push(contentRes);
+          }
         }
+
         const waitForQueueEmpty = () =>
           new Promise((resolve) => {
             const check = () => {
@@ -232,5 +285,14 @@
   #answer-container {
     height: 280px;
     overflow-y: auto;
+  }
+
+  /* 调整模态框内iframe样式 */
+  .n-modal-body {
+    padding: 0 !important;
+
+    iframe {
+      border-radius: 8px;
+    }
   }
 </style>
