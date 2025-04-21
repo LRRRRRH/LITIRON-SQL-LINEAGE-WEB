@@ -123,18 +123,18 @@
     const linkSet = new Set<string>();
 
     apiDataList.forEach((apiData) => {
-      const isCurrentNode = apiData.tableName === currentTable.value;
+      const isCurrentNode = apiData.columnName === currentColumn.value;
       // 处理当前节点
       const currentNode = {
         id: apiData.id,
-        name: apiData.tableName,
+        name: apiData.columnName,
         isCurrent: isCurrentNode,
         meta: {
-          ip: apiData.connectionIp,
-          port: apiData.connectionPort,
+          tableName: apiData.tableName,
           database: apiData.databaseName,
           schema: apiData.schemaName,
-          comment: apiData.tableComment,
+          tableComment: apiData.tableComment,
+          columnComment: apiData.columnComment,
         },
       };
       nodeMap.set(currentNode.id, currentNode);
@@ -142,14 +142,16 @@
       // 处理所有关系（通过direction区分上下游）
       apiData.outgoingRelationShip?.forEach((relation: any) => {
         const targetNode = {
-          id: relation.to.id,
-          name: relation.to.tableName,
+          id: relation.sqlLineageColumnNode.id,
+          name: relation.sqlLineageColumnNode.columnName,
           meta: {
-            ip: relation.to.connectionIp,
-            port: relation.to.connectionPort,
-            database: relation.to.databaseName,
-            schema: relation.to.schemaName,
-            comment: relation.to.tableComment,
+            ip: relation.sqlLineageColumnNode.connectionIp,
+            port: relation.sqlLineageColumnNode.connectionPort,
+            database: relation.sqlLineageColumnNode.databaseName,
+            schema: relation.sqlLineageColumnNode.schemaName,
+            tableName: relation.sqlLineageColumnNode.tableName,
+            tableComment: relation.sqlLineageColumnNode.tableComment,
+            columnComment: relation.sqlLineageColumnNode.columnComment,
           },
         };
         nodeMap.set(targetNode.id, targetNode);
@@ -161,19 +163,19 @@
           : [currentNode.id, targetNode.id]; // 下游保持原方向
 
         // 生成唯一边标识（考虑方向）
-        const edgeKey = `${sourceId}-${targetId}-${relation.relationFiled}`;
+        const edgeKey = relation.businessId;
         if (linkSet.has(edgeKey)) return;
 
         edges.push({
           source: sourceId,
           target: targetId,
-          label: relation.relationFiled,
+          id: relation.businessId,
           lineStyle: {
             type: isUpstream ? 'dashed' : 'solid',
           },
           properties: {
             direction: relation.direction,
-            relationshipId: relation.id,
+            relationshipId: relation.businessId,
           },
         });
         linkSet.add(edgeKey);
@@ -229,6 +231,17 @@
       message.error('请选择要查询的列名');
       return;
     }
+    if (!chartDom.value) return;
+
+    // 初始化图表实例（若不存在）
+    if (!myChart.value) {
+      myChart.value = echarts.init(chartDom.value);
+      myChart.value.on('dblclick', handleNodeDoubleClick);
+    }
+
+    if (myChart.value) {
+      myChart.value.showLoading();
+    }
     let obj = {
       id: currentConnection.value,
       databaseName: '',
@@ -252,6 +265,10 @@
       initChart();
     } catch (error) {
       console.error('数据获取失败:', error);
+    } finally {
+      if (myChart.value) {
+        myChart.value.hideLoading();
+      }
     }
   };
   const handleNodeDoubleClick = async (nodeData: any) => {
@@ -259,18 +276,23 @@
       id: currentConnection.value,
       databaseName: nodeData.meta.database,
       schemaName: nodeData.meta.schema,
-      tableName: nodeData.name,
+      tableName: nodeData.meta.tableName,
       columnName: currentColumn.value,
     };
     try {
+      if (myChart.value) {
+        myChart.value.showLoading();
+      }
       const result = await retrieveNeo4jColumn(requestParams);
       const { nodes: newNodes, edges: newEdges } = processGraphData(result as any);
-      console.log('newNodes', newNodes);
-      console.log('newEdges', newEdges);
       mergeGraphData(newNodes, newEdges); // 合并数据
       updateChart(); // 更新图表
     } catch (error) {
       console.error('Failed to load node relations:', error);
+    } finally {
+      if (myChart.value) {
+        myChart.value.hideLoading();
+      }
     }
   };
   const mergeGraphData = (newNodes: any[], newEdges: any[]) => {
@@ -284,13 +306,13 @@
     });
     console.log('nodes', nodes.value);
 
-    // 边去重（按 source-target-label）
-    const existingEdgeKeys = new Set(edges.value.map((e) => `${e.source}-${e.target}-${e.label}`));
+    // 边去重
+    const existingEdgeIds = new Set(edges.value.map((e) => e.id));
+
     newEdges.forEach((edge) => {
-      const edgeKey = `${edge.source}-${edge.target}-${edge.label}`;
-      if (!existingEdgeKeys.has(edgeKey)) {
+      if (!existingEdgeIds.has(edge.id)) {
         edges.value.push(edge);
-        existingEdgeKeys.add(edgeKey);
+        existingEdgeIds.add(edge.id);
       }
     });
     console.log('edges', edges.value);
@@ -340,14 +362,8 @@
     myChart.value.on('dblclick', async (params) => {
       if (params.dataType === 'node') {
         const nodeData = params.data;
-        console.log(nodeData, 'nodeData');
         await handleNodeDoubleClick(nodeData);
       }
-    });
-    myChart.value.showLoading({
-      text: '加载中',
-      fontSize: 16,
-      textColor: '#000',
     });
     const option: EChartsOption = {
       tooltip: {
@@ -355,13 +371,15 @@
           if (params.dataType === 'node') {
             const data = params.data;
             return `
-            <div>表名：${data.name}</div>
-             ${data.meta.comment ? `<div>表注释：${data.meta.comment}</div></div>` : ''}
-                ${data.meta.schema ? `<div>Schema: ${data.meta.schema}</div>` : ''}
+            <div>列名：${data.name}</div>
+            ${data.meta.columnComment ? `<div>列注释：${data.meta.columnComment}</div></div>` : ''}
+            <div>表名：${data.meta.tableName}</div>
+             ${data.meta.tableComment ? `<div>表注释：${data.meta.tableComment}</div></div>` : ''}
+             ${data.meta.schema ? `<div>Schema: ${data.meta.schema}</div>` : ''}
             <div>数据库: ${data.meta.database}</div>
           `;
           }
-          return `${params.data.label} 关系`;
+          return `对应关系`;
         },
       },
       series: [
@@ -394,10 +412,6 @@
             ...edge,
             lineStyle: {
               type: edge.properties.direction === 'UPSTREAM' ? 'dashed' : 'solid',
-              color:
-                edge.properties.direction === 'UPSTREAM'
-                  ? '#FF8800' // 上游橙色
-                  : '#0099FF', // 下游蓝色
               curveness: 0.3,
             },
           })),
@@ -430,9 +444,9 @@
       ],
     };
     myChart.value.setOption(option);
-    setTimeout(() => {
-      myChart.value.hideLoading();
-    }, 1000);
+    // setTimeout(() => {
+    //   myChart.value.hideLoading();
+    // }, 1000);
   };
   const updateConnection = async (value: string) => {
     selectConditionLoading.value = true;

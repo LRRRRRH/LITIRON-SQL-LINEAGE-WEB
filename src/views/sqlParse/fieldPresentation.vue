@@ -62,27 +62,49 @@
         <div class="presentation-box-right">
           <div class="right-title"><strong>解析结果</strong></div>
           <div class="parse-result">
-            <n-card hoverable style="white-space: pre-wrap">
+            <n-card hoverable>
               <n-scrollbar style="height: 380px">
-                <n-space vertical>
-                  <n-card v-if="!parseSuccess" size="small" hoverable>
+                <div v-if="!parseSuccess" class="error-container">
+                  <n-alert type="error" :bordered="false">
                     {{ parseErrorReason }}
-                  </n-card>
-                  <n-card
-                    v-else
-                    v-for="item in parseResult"
-                    hoverable
-                    :key="item.tableName"
-                    size="small"
-                  >
-                    <div v-if="currentDataBaseType === 'mysql'"
-                      >数据库名: {{ item.databaseName }}
-                    </div>
-                    <div v-else>模式名: {{ item.schemaName }}</div>
-                    <div>表名: {{ item.tableName }}</div>
-                    <div>表注释: {{ item.tableComment }}</div>
-                  </n-card>
-                </n-space>
+                  </n-alert>
+                </div>
+                <n-table
+                  :bordered="true"
+                  v-if="parseResult && parseResult.length > 0"
+                  :single-line="false"
+                  :zebra="true"
+                  size="small"
+                >
+                  <thead>
+                    <tr>
+                      <th v-if="currentDataBaseType === 'mysql'">数据库名</th>
+                      <th v-else>模式名</th>
+                      <th>表名</th>
+                      <th>表注释</th>
+                      <th>字段名</th>
+                      <th>字段注释</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-if="parseSuccess">
+                      <tr v-for="(item, index) in parseResult" :key="index">
+                        <td v-if="currentDataBaseType === 'mysql'">{{
+                          item.databaseName || '-'
+                        }}</td>
+                        <td v-else>{{ item.schemaName || '-' }}</td>
+                        <td>{{ item.tableName || '-' }}</td>
+                        <td>{{ item.tableComment || '-' }}</td>
+                        <td>{{ item.columnName || '-' }}</td>
+                        <td>{{ item.columnComment || '-' }}</td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </n-table>
+                <!-- 空数据提示 -->
+                <div v-else-if="parseSuccess" class="empty-tip">
+                  <n-empty description="暂无解析结果"></n-empty>
+                </div>
               </n-scrollbar>
             </n-card>
           </div>
@@ -95,10 +117,10 @@
 <script lang="ts" setup>
   import { onMounted, ref } from 'vue';
   import { useMessage } from 'naive-ui';
-  import { Parser } from 'js-sql-parser';
+  import { Parser } from 'node-sql-parser';
   import { getConnectionLists, updateDbConnection } from '@/api/lineage/search';
   import { getPgDbList } from '@/api/database/database';
-  import { parseRelationTables } from '@/api/sql/parse';
+  import { parseRelationColumns } from '@/api/sql/parse';
 
   let parseContent = ref('');
   let parseResult = ref([]);
@@ -223,18 +245,19 @@
         connectionId: currentConnection.value,
         pgDbName: currentPgDbName.value,
       };
-      let tempResult = await parseRelationTables(obj);
+      let tempResult = await parseRelationColumns(obj);
+      console.log('tempResult', tempResult);
       if (!tempResult) {
         parseLoading.value = false;
-        parseErrorReason.value = '未解析出有效表结构';
+        parseErrorReason.value = '未解析出有效字段结构';
         return;
       }
       const results = [];
-      const tempSet = new Set([...tempResult.sourceTableList, ...tempResult.destTableList]);
+      const tempSet = new Set([...tempResult]);
       results.push(...Array.from(tempSet));
       parseResult.value = results;
       if (!parseSuccess.value) {
-        parseErrorReason.value = '未解析出有效表结构';
+        parseErrorReason.value = '未解析出有效字段结构';
       }
       parseSuccess.value = true;
       parseLoading.value = false;

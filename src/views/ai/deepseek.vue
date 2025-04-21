@@ -65,7 +65,8 @@
   import '@kangc/v-md-editor/lib/style/preview.css';
   import githubTheme from '@kangc/v-md-editor/lib/theme/github.js';
   import '@kangc/v-md-editor/lib/theme/style/github.css';
-
+  import { useUserStore } from '@/store/modules/user';
+  const userStore = useUserStore();
   VMdPreview.use(githubTheme);
   const answerLoading = ref(false);
   const answer = ref('');
@@ -163,6 +164,7 @@
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        Token: userStore.getToken,
       },
     })
       .then(async (response) => {

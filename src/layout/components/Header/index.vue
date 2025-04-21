@@ -163,7 +163,7 @@
       const drawerSetting = ref();
 
       const state = reactive({
-        username: userStore?.info?.username ?? '',
+        username: userStore?.info?.nickName ?? '',
         fullscreenIcon: 'FullscreenOutlined',
         navMode,
         navTheme,

@@ -62,27 +62,46 @@
         <div class="presentation-box-right">
           <div class="right-title"><strong>解析结果</strong></div>
           <div class="parse-result">
-            <n-card hoverable style="white-space: pre-wrap">
+            <n-card hoverable>
               <n-scrollbar style="height: 380px">
-                <n-space vertical>
-                  <n-card v-if="!parseSuccess" size="small" hoverable>
+                <div v-if="!parseSuccess" class="error-container">
+                  <n-alert type="error" :bordered="false">
                     {{ parseErrorReason }}
-                  </n-card>
-                  <n-card
-                    v-else
-                    v-for="item in parseResult"
-                    hoverable
-                    :key="item.tableName"
-                    size="small"
-                  >
-                    <div v-if="currentDataBaseType === 'mysql'"
-                      >数据库名: {{ item.databaseName }}
-                    </div>
-                    <div v-else>模式名: {{ item.schemaName }}</div>
-                    <div>表名: {{ item.tableName }}</div>
-                    <div>表注释: {{ item.tableComment }}</div>
-                  </n-card>
-                </n-space>
+                  </n-alert>
+                </div>
+                <n-table
+                  :bordered="true"
+                  :single-line="false"
+                  size="small"
+                  v-if="parseResult && parseResult.length > 0"
+                >
+                  <!-- 表头 -->
+                  <thead>
+                    <tr>
+                      <th v-if="currentDataBaseType === 'mysql'">数据库名</th>
+                      <th v-else>模式名</th>
+                      <th>表名</th>
+                      <th>表注释</th>
+                    </tr>
+                  </thead>
+                  <!-- 数据行 -->
+                  <tbody>
+                    <template v-if="parseSuccess">
+                      <tr v-for="(item, index) in parseResult" :key="index">
+                        <td v-if="currentDataBaseType === 'mysql'">{{
+                          item.databaseName || '-'
+                        }}</td>
+                        <td v-else>{{ item.schemaName || '-' }}</td>
+                        <td>{{ item.tableName || '-' }}</td>
+                        <td>{{ item.tableComment || '-' }}</td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </n-table>
+                <!-- 空数据提示 -->
+                <div v-else-if="parseSuccess" class="empty-tip">
+                  <n-empty description="暂无解析结果"></n-empty>
+                </div>
               </n-scrollbar>
             </n-card>
           </div>
@@ -241,6 +260,7 @@
     } catch (error) {
       parseSuccess.value = false;
       parseErrorReason.value = '解析失败\n' + error;
+      console.log(parseErrorReason.value);
       console.error('SQL语法错误:', error);
       parseLoading.value = false;
       message.error('SQL语法错误，解析失败，请重试！');

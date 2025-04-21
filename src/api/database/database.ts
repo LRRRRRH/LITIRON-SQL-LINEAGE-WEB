@@ -29,7 +29,11 @@ export function getDatabaseConnectionList() {
 
 //获取某个用户的连接信息
 export function getDatabaseConnectionListByUid(data) {
-  return Alova.Post('/database/myConnection/retrieve', data);
+  return Alova.Post('/database/myConnection/retrieve', data, {
+    meta: {
+      isReturnNativeResponse: true,
+    },
+  });
 }
 
 //获取所有表内容

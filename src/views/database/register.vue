@@ -4,7 +4,7 @@
       <div class="search-condition-box">
         <n-flex>
           <n-select
-            placeholder="请输入数据库类型"
+            placeholder="请选择数据库类型"
             :options="typeOptions"
             v-model:value="searchForm.type"
             clearable
@@ -89,6 +89,7 @@
     deleteDatabaseConnection,
     editDatabaseConnection,
     getDatabaseConnectionList,
+    getDatabaseConnectionListByUid,
   } from '@/api/database/database';
   import { NButton, NSpace, useDialog, useMessage } from 'naive-ui';
 
@@ -299,24 +300,22 @@
   };
   const getDbConnection = async () => {
     tableLoading.value = true;
-    list.connectionList = await getDatabaseConnectionList();
-    tableLoading.value = false;
-    // list.value = await getDatabaseConnectionListByUid({
-    //   pageSize: pagination.pageSize,
-    //   pageNumber: pagination.page,
-    //   type : searchForm.value.type,
-    //   connectionName:searchForm.value.connectionName
-    // })
-    //   .then((res)=>{
-    //     pagination.total = res.count;
-    //     list.connectionList = res.data;
-    //     tableLoading.value=false;
-    //   })
-    //   .catch((error) => {
-    //     console.error(error);
-    //     tableLoading.value = false;
-    //   });
-    console.log(list.connectionList);
+    list.value = await getDatabaseConnectionListByUid({
+      pageSize: pagination.pageSize,
+      pageNumber: pagination.page,
+      type: searchForm.value.type,
+      connectionName: searchForm.value.connectionName,
+    })
+      .then((res) => {
+        console.log(res, 'res');
+        pagination.total = res.count;
+        list.connectionList = res.data;
+        tableLoading.value = false;
+      })
+      .catch((error) => {
+        console.error(error);
+        tableLoading.value = false;
+      });
   };
   onMounted(() => {
     getDbConnection();

@@ -145,6 +145,7 @@
   import { LockClosedOutline, PersonOutline } from '@vicons/ionicons5';
   import { PageEnum } from '@/enums/pageEnum';
   import { websiteConfig } from '@/config/website.config';
+  import { register } from '@/api/system/user';
 
   interface FormState {
     username: string;
@@ -161,8 +162,8 @@
   const LOGIN_NAME = PageEnum.BASE_LOGIN_NAME;
 
   const formInline = reactive({
-    username: 'admin',
-    password: '123456',
+    username: '',
+    password: '',
     confirmPassword: '',
     code: '',
     isCaptcha: true,
@@ -172,7 +173,18 @@
   };
   const rules = {
     username: { required: true, message: '请输入用户名', trigger: 'blur' },
-    password: { required: true, message: '请输入密码', trigger: 'blur' },
+    password: {
+      required: true,
+      message: '请输入密码',
+      trigger: 'blur',
+      validator: (rule, value, callback) => {
+        if (!/^.{6,20}$/.test(value)) {
+          callback(new Error('密码需6-20位字符'));
+        } else {
+          callback();
+        }
+      },
+    },
     code: {
       required: true,
       validator: (rule, value) => {
@@ -222,16 +234,13 @@
 
         try {
           // 调用注册接口
-          // const res = await api.register({
-          //   username: formInline.username,
-          //   password: formInline.password
-          // });
-
-          // 模拟成功响应
-          setTimeout(() => {
-            message.success('注册成功');
-            router.push('/login');
-          }, 1500);
+          const res = await register({
+            username: formInline.username,
+            password: formInline.password,
+          });
+          message.success('注册成功！请登录');
+          changeOption(); // 切换到登录界面
+          refreshCode();
         } finally {
           loading.value = false;
         }
@@ -264,6 +273,7 @@
 
         try {
           const { code, message: msg } = await userStore.login(params);
+          console.log(message);
           message.destroyAll();
           if (code == ResultEnum.SUCCESS) {
             const toPath = decodeURIComponent((route.query?.redirect || '/') as string);
@@ -272,7 +282,7 @@
               router.replace('/');
             } else router.replace(toPath);
           } else {
-            message.info(msg || '登录失败');
+            message.info(message || '登录失败');
           }
         } finally {
           loading.value = false;

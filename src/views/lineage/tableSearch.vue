@@ -206,6 +206,15 @@
       message.error('请选择要查询的表');
       return;
     }
+    if (!chartDom.value) return;
+    // 初始化图表实例（若不存在）
+    if (!myChart.value) {
+      myChart.value = echarts.init(chartDom.value);
+      myChart.value.on('dblclick', handleNodeDoubleClick);
+    }
+    if (myChart.value) {
+      myChart.value.showLoading();
+    }
     let obj = {
       id: currentConnection.value,
       databaseName: '',
@@ -228,6 +237,10 @@
       initChart();
     } catch (error) {
       console.error('数据获取失败:', error);
+    } finally {
+      if (myChart.value) {
+        myChart.value.hideLoading();
+      }
     }
   };
   const handleNodeDoubleClick = async (nodeData: any) => {
@@ -238,12 +251,19 @@
       tableName: nodeData.name,
     };
     try {
+      if (myChart.value) {
+        myChart.value.showLoading();
+      }
       const result = await retrieveNeo4jTable(requestParams);
       const { nodes: newNodes, edges: newEdges } = processGraphData(result as any);
       mergeGraphData(newNodes, newEdges); // 合并数据
       updateChart(); // 更新图表
     } catch (error) {
       console.error('Failed to load node relations:', error);
+    } finally {
+      if (myChart.value) {
+        myChart.value.hideLoading();
+      }
     }
   };
   const mergeGraphData = (newNodes: any[], newEdges: any[]) => {
@@ -288,10 +308,6 @@
             ...edge,
             lineStyle: {
               type: edge.properties.direction === 'UPSTREAM' ? 'dashed' : 'solid',
-              color:
-                edge.properties.direction === 'UPSTREAM'
-                  ? '#FF8800' // 上游橙色
-                  : '#0099FF', // 下游蓝色
               curveness: 0.3,
             },
           })),
@@ -312,11 +328,6 @@
         const nodeData = params.data;
         await handleNodeDoubleClick(nodeData);
       }
-    });
-    myChart.value.showLoading({
-      text: '加载中',
-      fontSize: 16,
-      textColor: '#000',
     });
     const option: EChartsOption = {
       tooltip: {
@@ -399,9 +410,6 @@
       ],
     };
     myChart.value.setOption(option);
-    setTimeout(() => {
-      myChart.value.hideLoading();
-    }, 1000);
   };
   const updateConnection = async (value: string) => {
     selectConditionLoading.value = true;

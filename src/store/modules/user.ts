@@ -7,14 +7,16 @@ import { getUserInfo as getUserInfoApi, login } from '@/api/system/user';
 import { storage } from '@/utils/Storage';
 
 export type UserInfoType = {
-  // TODO: add your own data
-  username: string;
+  userName: string;
+  nickName: string;
   email: string;
+  phone: string;
+  address: string;
 };
 
 export interface IUserState {
   token: string;
-  username: string;
+  userName: string;
   welcome: string;
   avatar: string;
   permissions: any[];
@@ -25,7 +27,7 @@ export const useUserStore = defineStore({
   id: 'app-user',
   state: (): IUserState => ({
     token: storage.get(ACCESS_TOKEN, ''),
-    username: '',
+    userName: '',
     welcome: '',
     avatar: '',
     permissions: [],
@@ -39,7 +41,7 @@ export const useUserStore = defineStore({
       return this.avatar;
     },
     getNickname(): string {
-      return this.username;
+      return this.userName;
     },
     getPermissions(): [any][] {
       return this.permissions;
@@ -64,37 +66,31 @@ export const useUserStore = defineStore({
     // 登录
     async login(params: any) {
       const response = await login(params);
-      const { result, code } = response;
+      // @ts-ignore
+      const { code, message } = response;
       if (code === ResultEnum.SUCCESS) {
         const ex = 7 * 24 * 60 * 60;
-        storage.set(ACCESS_TOKEN, result.token, ex);
-        storage.set(CURRENT_USER, result, ex);
+        storage.set(ACCESS_TOKEN, message, ex);
+        storage.set(CURRENT_USER, message, ex);
         storage.set(IS_SCREENLOCKED, false);
-        this.setToken(result.token);
-        this.setUserInfo(result);
+        this.setToken(message);
+        await this.getInfo();
       }
       return response;
     },
 
     // 获取用户信息
     async getInfo() {
-      const data = await getUserInfoApi();
-      const { result } = data;
-      if (result.permissions && result.permissions.length) {
-        const permissionsList = result.permissions;
-        this.setPermissions(permissionsList);
-        this.setUserInfo(result);
-      } else {
-        throw new Error('getInfo: permissionsList must be a non-null array !');
-      }
-      this.setAvatar(result.avatar);
+      const result = await getUserInfoApi();
+      const { data } = result;
+      this.setUserInfo(data);
       return result;
     },
 
     // 登出
     async logout() {
       this.setPermissions([]);
-      this.setUserInfo({ username: '', email: '' });
+      this.setUserInfo({ address: '', nickName: '', phone: '', userName: '', email: '' });
       storage.remove(ACCESS_TOKEN);
       storage.remove(CURRENT_USER);
     },
